@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+     Copyright 2005-2014 Red Hat, Inc.
+
+     Red Hat licenses this file to you under the Apache License, version
+     2.0 (the "License"); you may not use this file except in compliance
+     with the License.  You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+     implied.  See the License for the specific language governing
+     permissions and limitations under the License.
+
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd        http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <bean
+        class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" id="bean-9da6dd06-e1f7-4083-8fdc-1b9b7b6c0624">
+        <property name="location">
+            <value>classpath:salesforceconfig.properties</value>
+        </property>
+    </bean>
+    <bean
+        class="org.apache.camel.component.salesforce.SalesforceComponent" id="salesforce">
+        <property name="loginConfig">
+            <bean class="org.apache.camel.component.salesforce.SalesforceLoginConfig">
+                <property name="loginUrl" value="${loginUrl}"/>
+                <property name="userName" value="${userName}"/>
+                <property name="password" value="${password}"/>
+                <property name="clientId" value="${clientId}"/>
+                <property name="clientSecret" value="${clientSecret}"/>
+            </bean>
+        </property>
+        <property name="config">
+            <bean class="org.apache.camel.component.salesforce.SalesforceEndpointConfig">
+                <property name="sObjectName" value="${sObjectName}"/>
+                <property name="sObjectClass" value="${sObjectClass}"/>
+            </bean>
+        </property>
+        <property name="packages" value="${sObjectDTOPackages}"/>
+    </bean>
+    <bean class="com.redhat.sap.req.FlightCustomerCreateReq" id="flightCustomerCreateReq"/>
+    <bean class="com.redhat.salesforce.MessageService" id="messageService"/>
+    <bean
+        class="org.apache.camel.spring.boot.FatJarPackageScanClassResolver" id="fatJarPackageResolver"/>
+    <camelContext id="camelContext-eb7d5bef-0d36-405f-9b65-d344c5b7fa45" xmlns="http://camel.apache.org/schema/spring">
+        <endpoint id="CustomerDataTransform" uri="dozer:CustomerDataTransform?sourceModel=org.apache.camel.salesforce.dto.Account&amp;targetModel=com.redhat.sap.req.CustomerData&amp;mappingFile=transformation.xml"/>
+        <route id="oppchangelistener">
+            <from id="_from1" uri="salesforce:CamelTestTopic?notifyForOperationUndelete=true&amp;notifyForFields=ALL&amp;sObjectName=Opportunity&amp;updateTopic=true&amp;sObjectQuery=SELECT id,name,AccountId,StageName from Opportunity"/>
+            <marshal id="_marshal1">
+                <json library="Jackson" prettyPrint="true"/>
+            </marshal>
+            <log id="_log1" message="Notification result back from Salesforce: ${body}"/>
+            <setHeader headerName="accountID" id="_setHeader1">
+                <jsonpath>AccountId</jsonpath>
+            </setHeader>
+            <log id="_log2" message="accountId: ${headers.accountID}"/>
+            <setHeader headerName="stageName" id="_setHeader5">
+                <jsonpath>StageName</jsonpath>
+            </setHeader>
+            <choice id="_choice1">
+                <when id="_when1">
+                    <simple>${headers.stageName} == 'Closed Won'</simple>
+                    <to id="_to1" uri="direct:getAccount"/>
+                </when>
+            </choice>
+        </route>
+        <route id="getAccount">
+            <from id="_from2" uri="direct:getAccount"/>
+            <setHeader headerName="sObjectId" id="_setHeader2">
+                <simple>${headers.accountID}</simple>
+            </setHeader>
+            <log id="_log5" message="To Salesforce--->"/>
+            <to id="_to2" uri="salesforce:getSObject?sObjectName=Account"/>
+            <marshal id="_unmarshal1">
+                <json library="Jackson"/>
+            </marshal>
+            <log id="_log3" message="Query Account back from Salesforce: ${body}"/>
+            <!--  <bean id="_bean1" method="setCustomerData" ref="flightCustomerCreateReq"/>
+            <unmarshal id="_unmarshal1">
+                <jaxb contextPath="com.redhat.sap.req" prettyPrint="true"/>
+            </unmarshal>-->
+            <setHeader headerName="opptyid" id="_setHeader3">
+                <jsonpath>Id</jsonpath>
+            </setHeader>
+            <setHeader headerName="opptyname" id="_setHeader4">
+                <jsonpath>Name</jsonpath>
+            </setHeader>
+            <bean id="_bean2"
+                method="alert(${headers.opptyid},${headers.opptyname})" ref="messageService"/>
+            <marshal id="_unmarshal1">
+                <json library="Jackson"/>
+            </marshal>
+            <convertBodyTo id="_convertBodyTo1" type="java.lang.String"/>
+            <log id="_log4" message="XML to SAP : ${body}"/>
+            <removeHeaders id="_removeHeaders1" pattern="CamelHttp*"/>
+            <setHeader headerName="CamelHttpMethod" id="_setHeader6">
+                <constant>POST</constant>
+            </setHeader>
+            <setHeader headerName="Content-Type" id="_setHeader7">
+                <constant>application/json</constant>
+            </setHeader>
+            <to id="_to3" uri="https4://push.34.210.10.237.xip.io:443/api/v2/ag-push/rest/sender?user-key=616112f133258148445d236809aff50d"/>
+        </route>
+    </camelContext>
+</beans>
