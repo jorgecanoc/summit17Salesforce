@@ -12,4 +12,12 @@ public class MessageService {
 		return msgresponse;
 	}
 
+	public String trimAuthenticationencodedString(String idpwd){
+		
+		System.out.println("B4---->"+idpwd);
+		String newone = (String)idpwd.replaceAll("\\r\\n", "");
+		System.out.println("AF---->["+newone+"]");
+		
+		return newone;
+	}
 }

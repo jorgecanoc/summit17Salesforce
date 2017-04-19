@@ -16,8 +16,12 @@
      permissions and limitations under the License.
 
 -->
-<beans xmlns="http://www.springframework.org/schema/beans"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd        http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+<beans xmlns="http://www.springframework.org/schema/beans" 
+	xmlns:camel="http://camel.apache.org/schema/spring"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xsi:schemaLocation="
+    		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+            http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
     <bean
         class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" id="bean-9da6dd06-e1f7-4083-8fdc-1b9b7b6c0624">
         <property name="location">
@@ -45,11 +49,16 @@
     </bean>
     <bean class="com.redhat.sap.req.FlightCustomerCreateReq" id="flightCustomerCreateReq"/>
     <bean class="com.redhat.salesforce.MessageService" id="messageService"/>
-    <bean
-        class="org.apache.camel.spring.boot.FatJarPackageScanClassResolver" id="fatJarPackageResolver"/>
+    <bean class="org.apache.camel.spring.boot.FatJarPackageScanClassResolver" id="fatJarPackageResolver"/>
+    
+  
     <camelContext id="camelContext-eb7d5bef-0d36-405f-9b65-d344c5b7fa45" xmlns="http://camel.apache.org/schema/spring">
+        
+		    
+        <propertyPlaceholder id="properties" location="classpath:notification.properties"/>
         <endpoint id="CustomerDataTransform" uri="dozer:CustomerDataTransform?sourceModel=org.apache.camel.salesforce.dto.Account&amp;targetModel=com.redhat.sap.req.CustomerData&amp;mappingFile=transformation.xml"/>
-        <route id="oppchangelistener">
+        
+       <route id="oppchangelistener">
             <from id="_from1" uri="salesforce:CamelTestTopic?notifyForOperationUndelete=true&amp;notifyForFields=ALL&amp;sObjectName=Opportunity&amp;updateTopic=true&amp;sObjectQuery=SELECT id,name,AccountId,StageName from Opportunity"/>
             <marshal id="_marshal1">
                 <json library="Jackson" prettyPrint="true"/>
@@ -70,6 +79,11 @@
             </choice>
         </route>
         <route id="getAccount">
+        	
+            <!--  <bean id="_bean1" method="setCustomerData" ref="flightCustomerCreateReq"/>
+            <unmarshal id="_unmarshal1">
+                <jaxb contextPath="com.redhat.sap.req" prettyPrint="true"/>
+            </unmarshal>-->
             <from id="_from2" uri="direct:getAccount"/>
             <setHeader headerName="sObjectId" id="_setHeader2">
                 <simple>${headers.accountID}</simple>
@@ -80,10 +94,6 @@
                 <json library="Jackson"/>
             </marshal>
             <log id="_log3" message="Query Account back from Salesforce: ${body}"/>
-            <!--  <bean id="_bean1" method="setCustomerData" ref="flightCustomerCreateReq"/>
-            <unmarshal id="_unmarshal1">
-                <jaxb contextPath="com.redhat.sap.req" prettyPrint="true"/>
-            </unmarshal>-->
             <setHeader headerName="opptyid" id="_setHeader3">
                 <jsonpath>Id</jsonpath>
             </setHeader>
@@ -97,14 +107,46 @@
             </marshal>
             <convertBodyTo id="_convertBodyTo1" type="java.lang.String"/>
             <log id="_log4" message="XML to SAP : ${body}"/>
+            <setHeader headerName="notificationBody" id="tempNotificationHeader">
+                <simple>${body}</simple>
+            </setHeader>
+            <to id="_to4" uri="direct:prepBase64Auth"/>
             <removeHeaders id="_removeHeaders1" pattern="CamelHttp*"/>
             <setHeader headerName="CamelHttpMethod" id="_setHeader6">
                 <constant>POST</constant>
             </setHeader>
-            <setHeader headerName="Content-Type" id="_setHeader7">
-                <constant>application/json</constant>
+            <setHeader headerName="content-type" id="_setHeader7">
+                <constant>application/json; charset=utf-8</constant>
             </setHeader>
-            <to id="_to3" uri="https4://push.34.210.10.237.xip.io:443/api/v2/ag-push/rest/sender?user-key=616112f133258148445d236809aff50d"/>
+            <setHeader headerName="authorization" id="_setHeader8">
+                <simple>${headers.authenticationValue}</simple>
+            </setHeader>
+            <setHeader headerName="cache-control" id="_setHeader8">
+                <constant>no-cache</constant>
+            </setHeader>
+            <setBody id="_setBody2">
+                <simple>${headers.notificationBody}</simple>
+            </setBody>
+            <log id="_log8" message="authenticationValue------> ${headers.authenticationValue}"/>
+            <log id="_log9" message="sentbody------> ${body}"/>
+            <to id="_to3" uri="https4://mhu.us.demos.redhatmobile.com/api/v2/ag-push/rest/sender?httpClientConfigurer=myHttpClientConfigurerTrustAllCACerts&amp;user-key={{notificationUserkey}}"/>
+        </route>
+        <route id="prepBase64Authroute">
+            <from id="_from3" uri="direct:prepBase64Auth"/>
+            <!--<from id="_from3" uri="timer:foo?repeatCount=1"/>-->
+            <setBody id="_setBody1">
+                <simple>{{notificationServerLogin}}:{{notificationServerPwd}}</simple>
+            </setBody>
+            <log id="_log6" message="Before Marshal ---> ${body}"/>
+            <marshal id="_marshal2">
+                <base64 lineLength="73"/>
+            </marshal>
+            <log id="_log7" message="After Marshal ---> ${body}"/>
+            <bean id="_bean3" method="trimAuthenticationencodedString(${body})" ref="messageService"/>
+            <setHeader headerName="authenticationValue" id="_setHeader9">
+                <simple>Basic ${body}</simple>
+            </setHeader>
+            <log id="_log10" message="----> ${headers.authenticationValue}"/>
         </route>
     </camelContext>
 </beans>
