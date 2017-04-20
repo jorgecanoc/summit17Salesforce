@@ -78,8 +78,7 @@
                 </when>
             </choice>
         </route>
-        <route id="getAccount">
-        	
+        <route id="getAccount">     	
             <!--  <bean id="_bean1" method="setCustomerData" ref="flightCustomerCreateReq"/>
             <unmarshal id="_unmarshal1">
                 <jaxb contextPath="com.redhat.sap.req" prettyPrint="true"/>
@@ -124,12 +123,15 @@
             <setHeader headerName="cache-control" id="_setHeader8">
                 <constant>no-cache</constant>
             </setHeader>
+            <setHeader headerName="user-key" id="_setHeader10">
+                <simple>{{notificationUserkey}}</simple>
+            </setHeader>
             <setBody id="_setBody2">
                 <simple>${headers.notificationBody}</simple>
             </setBody>
-            <log id="_log8" message="authenticationValue------> ${headers.authenticationValue}"/>
+            <log id="_log8" message="user-key------> ${headers.user-key}"/>
             <log id="_log9" message="sentbody------> ${body}"/>
-            <to id="_to3" uri="https4://mhu.us.demos.redhatmobile.com/api/v2/ag-push/rest/sender?httpClientConfigurer=myHttpClientConfigurerTrustAllCACerts&amp;user-key={{notificationUserkey}}"/>
+            <to id="_to3" uri="http4://push.34.210.10.237.xip.io/api/v2/ag-push/rest/sender"/>
         </route>
         <route id="prepBase64Authroute">
             <from id="_from3" uri="direct:prepBase64Auth"/>
@@ -146,7 +148,6 @@
             <setHeader headerName="authenticationValue" id="_setHeader9">
                 <simple>Basic ${body}</simple>
             </setHeader>
-            <log id="_log10" message="----> ${headers.authenticationValue}"/>
         </route>
     </camelContext>
 </beans>
